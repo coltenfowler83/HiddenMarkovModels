@@ -4,18 +4,19 @@ from collections import defaultdict
 from math import log2
 
 
-class BigramHMM:
-    def __init__(self, training_data, k=0.01):
+class TrigramHMM:
+    def __init__(self, training_data):
         self.unk_threshold = 2
-        self.k = k
+        self.k = 0.01
         self.training_data = self.tokenize_file(training_data)
         self.training_data = self.replace_word_classes(self.training_data)
         self.vocab = self._build_vocab()
         self.training_data = self.trim_low_freq(self.training_data)
         self.tag_counts = self._build_tag_counts()
-        self.tags = list(self.tag_counts.keys() - ['<s>'])
+        self.tags = list(self.tag_counts.keys() - ['<s2>', '<s>'])
         self.number_of_tags = len(self.tags)
         self.bigram_tag_counts = self._build_bigram_tag_counts()
+        self.trigram_tag_counts = self._build_trigram_tag_counts()
         self.emission_counts = self._build_emission_counts()
 
     @staticmethod
@@ -29,7 +30,7 @@ class BigramHMM:
 
     @staticmethod
     def replace_word_classes(sequences):
-        # create closed vocab by replacing #, @, and urls with tokens. trim low freq words.
+        # create closed vocab by replacing #, @, and urls with tokens. set words to lower case
         url_pattern = re.compile('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
         for i in range(len(sequences)):
             for j in range(len(sequences[i])):
@@ -71,8 +72,9 @@ class BigramHMM:
 
     def _build_tag_counts(self):
         tag_counts = defaultdict(int)
-        # add a start tag for each sentence
+        # add 2 start tags for each sentence
         tag_counts['<s>'] = len(self.training_data)
+        tag_counts['<s2>'] = len(self.training_data)
         for seq in self.training_data:
             for word, tag in seq:
                 tag_counts[tag] += 1
@@ -81,6 +83,7 @@ class BigramHMM:
 
     def _build_bigram_tag_counts(self):
         bigram_tag_counts = defaultdict(lambda: defaultdict(int))
+        bigram_tag_counts['<s2>']['<s>'] = len(self.training_data)
         for seq in self.training_data:
             tags = list(zip(*seq))[1]
             # add values for (<start>, tag1)
@@ -90,6 +93,16 @@ class BigramHMM:
 
         return bigram_tag_counts
 
+    def _build_trigram_tag_counts(self):
+        trigram_tag_counts = defaultdict(lambda: defaultdict(int))
+        for seq in self.training_data:
+            tags = list(zip(*seq))[1]
+            trigram_tag_counts[('<s2>', '<s>')][tags[0]] += 1
+            for tag1, tag2, tag3 in zip(tags, tags[1:], tags[2:]):
+                trigram_tag_counts[(tag1, tag2)][tag3] += 1
+
+        return trigram_tag_counts
+
     def _build_emission_counts(self):
         emission_counts = defaultdict(lambda: defaultdict(int))
         for seq in self.training_data:
@@ -98,8 +111,8 @@ class BigramHMM:
 
         return emission_counts
 
-    def compute_transmission_mle(self, tag1, tag2):
-        return (self.bigram_tag_counts[tag1][tag2] + self.k) / (self.tag_counts[tag1] + self.k * self.number_of_tags)
+    def compute_transmission_mle(self, tag1, tag2, tag3):
+        return (self.trigram_tag_counts[(tag1, tag2)][tag3] + self.k) / (self.bigram_tag_counts[tag1][tag2] + self.k * self.number_of_tags)
 
     def compute_emission_mle(self, tag, word):
         return (self.emission_counts[tag][word] + self.k) / (
@@ -113,7 +126,7 @@ class BigramHMM:
         bp_matrix = [[0] * len(sentence) for _ in range(self.number_of_tags)]
 
         for i, tag in enumerate(self.tags):
-            trans_prob = log2(self.compute_transmission_mle('<s>', tag))
+            trans_prob = log2(self.compute_transmission_mle('<s2>', '<s>', tag))
             emi_prob = log2(self.compute_emission_mle(tag, sentence[0]))
             v_matrix[i][0] = trans_prob + emi_prob
             bp_matrix[i][0] = -1
@@ -125,14 +138,16 @@ class BigramHMM:
                 current_maxbp = -1
                 emi_prob = log2(self.compute_emission_mle(current_tag, word))
                 for k, prev_tag in enumerate(self.tags):
-                    prev_v = v_matrix[k][i - 1]
-                    trans_prob = log2(self.compute_transmission_mle(prev_tag, current_tag))
-                    current_v = prev_v + emi_prob + trans_prob
-                    if current_v > current_maxprob:
-                        current_maxprob = current_v
-                        current_maxbp = k
-                v_matrix[j][i] = current_maxprob
-                bp_matrix[j][i] = current_maxbp
+                    for m, prev_prev_tag in enumerate(self.tags):
+                        prev_v = v_matrix[k][i - 1]
+                        prev_prev_v = v_matrix[m][i-2]
+                        trans_prob = log2(self.compute_transmission_mle(prev_prev_tag, prev_tag, current_tag))
+                        current_v = prev_prev_v + prev_v + emi_prob + trans_prob
+                        if current_v > current_maxprob:
+                            current_maxprob = current_v
+                            current_maxbp = k
+                    v_matrix[j][i] = current_maxprob
+                    bp_matrix[j][i] = current_maxbp
 
         # need a tag-index map to decode
         index_tag_map = defaultdict(str)
@@ -161,6 +176,7 @@ class BigramHMM:
     def compute_accuracy(self, filename):
         error_count = 0
         observation_count = 0
+        counter = 1
         data = self.tokenize_file(filename)
         data = self.replace_word_classes(data)
         data = self.trim_low_freq(data)
@@ -175,4 +191,7 @@ class BigramHMM:
                         error_count += 1
                 observation_count += 1
 
+            acc = (observation_count - error_count) / observation_count
+            print(counter, acc)
+            counter += 1
         return (observation_count - error_count) / observation_count
