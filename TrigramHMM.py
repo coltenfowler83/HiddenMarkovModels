@@ -189,5 +189,6 @@ class TrigramHMM:
                     if actual != predicted:
                         error_count += 1
                 observation_count += 1
+            acc = (observation_count - error_count) / observation_count
 
         return (observation_count - error_count) / observation_count
