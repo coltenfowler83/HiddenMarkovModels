@@ -1,0 +1,7 @@
+This project contains bigram and trigram POS taggers using Hidden Markov Models.
+
+Bigram_main.py and Trigram_main.py are both runnable.
+
+Each script creates the HMM tagger, then runs the tagger for each sequence in twt.dev.json and twt.test.json.
+
+The scripts output the accuracy value of the tagger vs the observed values dev and test data.

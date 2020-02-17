@@ -176,7 +176,6 @@ class TrigramHMM:
     def compute_accuracy(self, filename):
         error_count = 0
         observation_count = 0
-        counter = 1
         data = self.tokenize_file(filename)
         data = self.replace_word_classes(data)
         data = self.trim_low_freq(data)
@@ -191,7 +190,4 @@ class TrigramHMM:
                         error_count += 1
                 observation_count += 1
 
-            acc = (observation_count - error_count) / observation_count
-            print(counter, acc)
-            counter += 1
         return (observation_count - error_count) / observation_count

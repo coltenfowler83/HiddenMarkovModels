@@ -6,9 +6,6 @@ test_file = 'twt.test.json'
 
 model = TrigramHMM(train_file)
 
-#train_accuracy = model.compute_accuracy(train_file)
-#print('Training Error: ', train_accuracy)
-
 #dev_accuracy = model.compute_accuracy(dev_file)
 #print('Dev Error: ', dev_accuracy)
 
